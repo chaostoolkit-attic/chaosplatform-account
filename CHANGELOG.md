@@ -2,11 +2,11 @@
 
 ## [Unreleased][]
 
-[Unreleased]: https://github.com/chaostoolkit/chaosplatform-auth/compare/0.1.2...HEAD
+[Unreleased]: https://github.com/chaostoolkit/chaosplatform-auth/compare/0.12.0...HEAD
 
-## [0.1.2][] - 2019-01-14
+## [0.2.0][] - 2019-01-14
 
-[0.1.2]: https://github.com/chaostoolkit/chaosplatform-scheduling/compare/0.1.1...0.1.2
+[0.2.0]: https://github.com/chaostoolkit/chaosplatform-scheduling/compare/0.1.1...0.2.0
 
 ### Changed
 
