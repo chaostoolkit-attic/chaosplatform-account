@@ -1,51 +1,40 @@
 # -*- coding: utf-8 -*-
-import glob
-import os
-
 import cherrypy
-from dotenv import load_dotenv
+import toml
 
 __all__ = ["load_settings"]
 
 
-def load_settings(env_path: str):
+def load_settings(toml_path: str):
     """
-    Load settings from the environment:
-
-    * if `env_path` is a file, read it
-    * if `env_path` is a directory, load, all its `*.env` files
+    Load settings from the environment.
     """
-    if os.path.isdir(env_path):
-        pattern = os.path.join(env_path, '**', '.env')
-        for env_file in glob.iglob(pattern, recursive=True):
-            cherrypy.log("Loading: {}".format(env_file))
-            load_dotenv(dotenv_path=env_file)
-    else:
-        cherrypy.log("Loading: {}".format(env_path))
-        load_dotenv(dotenv_path=env_path)
+    config = toml.load(toml_path)
+    if "chaosplatform" in config:
+        config = config["chaosplatform"]
 
-    debug = True if os.getenv('CHAOSPLATFORM_DEBUG') else False
+    debug = config.get("debug", False)
+    server_addr = config["http"]["address"]
+    host, port = server_addr.rsplit(":", 1)
+    default_cherrypy_env = "" if debug else "production"
+
+    cherrypy_config = config["http"].get("cherrypy", {})
+    cherrypy.engine.unsubscribe('graceful', cherrypy.log.reopen_files)
     cherrypy.config.update({
-        'server.socket_host': os.getenv('SERVER_LISTEN_ADDR'),
-        'server.socket_port': int(os.getenv('SERVER_LISTEN_PORT', 8080)),
+        'server.socket_host': server_addr,
+        'server.socket_port': server_addr,
         'engine.autoreload.on': False,
         'log.screen': debug,
-        'log.access_file': '',
-        'log.error_file': '',
-        'environment': '' if debug else 'production',
-        'tools.proxy.on': True,
-        'tools.proxy.base': os.getenv('CHERRYPY_PROXY_BASE')
+        'log.access_file': cherrypy_config.get("access_file", ""),
+        'log.error_file': cherrypy_config.get("error_file", ""),
+        'environment': cherrypy_config.get(
+            "environment", default_cherrypy_env)
     })
 
-    config = {
-        'GRPC_LISTEN_ADDR': os.getenv("GRPC_LISTEN_ADDR"),
-        'db': {
-            'uri': os.getenv("DATABASE_URI"),
-            'debug': debug
-        },
-        'debug': debug,
-        'grpc': {
-        }
-    }
+    if "proxy" in config["http"]:
+        cherrypy.config.update({
+            'tools.proxy.on': True,
+            'tools.proxy.base': config["http"]["proxy"]
+        })
 
     return config
