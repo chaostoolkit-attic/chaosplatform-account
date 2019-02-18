@@ -60,6 +60,13 @@ class OrgsMembers(Base):  # type: ignore
             filter_by(user_id=user_id).\
             first()
 
+    @staticmethod
+    def get_by_org(org_id: Union[UUID, str], 
+                   session: Session) -> 'OrgsMembers':
+        return session.query(OrgsMembers).\
+            filter_by(org_id=org_id).\
+            all()
+
 
 class OrgType(Enum):
     personal = "personal"
@@ -67,7 +74,10 @@ class OrgType(Enum):
 
 
 DEFAULT_ORG_SETTINGS = {  # type: ignore
-    "meta": {},
+    "email": None,
+    "url": None,
+    "logo": None,
+    "description": None,
     "visibility": {
         "execution": {
             "anonymous": ExecutionVisibility.none.value,
@@ -114,6 +124,15 @@ class Org(Base):  # type: ignore
         return session.query(Org).filter_by(name_lower=name).first()
 
     @staticmethod
+    def load_by_user(user_id: Union[UUID, str],
+                     session: Session) -> List['Org']:
+        return session.query(Org).\
+            filter(Org.id.in_(
+                session.query(OrgsMembers.org_id).\
+                    filter_by(user_id=user_id)
+            )).all()
+
+    @staticmethod
     def create_personal(user: User, org_name: str,
                         session: Session) -> 'Org':
         org = Org(
@@ -154,3 +173,20 @@ class Org(Base):  # type: ignore
         for w in self.workspaces:
             if w.id == workspace_id:
                 return w
+
+    def is_member(self, user_id: Union[str, uuid.UUID]) -> bool:
+        """
+        Return `True` when the given account is a member of the organization
+        """
+        return OrgsMembers.query.filter(
+            OrgsMembers.org_id==self.id,
+            OrgsMembers.user_id==user_id).first() is not None
+
+    def is_owner(self, user_id: Union[str, uuid.UUID]) -> bool:
+        """
+        Return `True` when the given account is an owner of the organization
+        """
+        return OrgsMembers.query.filter(
+            OrgsMembers.org_id==self.id, OrgsMembers.is_owner==True,
+            OrgsMembers.user_id==user_id).first() is not None
+

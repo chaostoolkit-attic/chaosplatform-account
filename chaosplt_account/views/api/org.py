@@ -7,7 +7,7 @@ from marshmallow import ValidationError
 
 from chaosplt_account.schemas import new_org_schema, org_schema, \
     link_workspace_schema, org_schema_short, orgs_schema_tiny, \
-    workspaces_schema
+    workspaces_schema, workspace_schema
 
 __all__ = ["api"]
 
@@ -35,7 +35,7 @@ def new():
     has_org = request.services.account.org.has_org_by_name(org_name)
     if has_org:
         return jsonify({
-            "message": "Name already used"
+            "name": ["Name already used"]
         }), 409
 
     org = request.services.account.org.create(org_name, user_id)
@@ -102,3 +102,21 @@ def unlink_workspace_from_org(org_id: UUID, workspace_id: UUID):
 
     request.services.account.org.remove_org(org_id, workspace_id)
     return "", 204
+
+
+@api.route('lookup/<string:org_name>', methods=['GET'])
+@login_required
+def lookup_org(org_name: str):
+    org = request.services.account.org.get_by_name(org_name)
+    if not org:
+        return abort(404)
+
+    workspaces = request.args.get("workspaces", [])
+    print(workspaces)
+    for workspace_name in workspaces:
+        workspace = request.services.account.workspace.get_by_name(
+            org.id, workspace_name)
+        if not workspace:
+            return abort(404)
+
+    return org_schema.jsonify(org)

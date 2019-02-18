@@ -7,7 +7,7 @@ from marshmallow import ValidationError
 
 from chaosplt_account.schemas import new_workspace_schema, workspace_schema, \
     workspaces_schema_tiny, workspace_schema_short, \
-    experiments_schema
+    experiments_schema, workspace_collaborators_schema
 
 __all__ = ["api"]
 
@@ -36,22 +36,22 @@ def new():
     org_id = payload["org"]
     workspace_svc = request.services.account.workspace
 
-    has_org = request.services.account.org.has_org(org_id=org_id)
+    has_org = request.services.account.org.has_org_by_id(org_id=org_id)
     if not has_org:
         return jsonify({
-            "message": "Unknown organization"
+            "org": ["Unknown organization"]
         }), 422
 
-    has_workspace = request.services.account.org.has_workspace(
+    has_workspace = request.services.account.org.has_workspace_by_name(
         org_id, workspace_name)
     if has_workspace:
         return jsonify({
-            "message": "Name already used in this organization"
+            "name": ["Name already used in this organization"]
         }), 409
 
     workspace = workspace_svc.create(
-        workspace_name, org_id, user_id, workspace_type, workspace_visibility)
-    return workspace_schema.jsonify(workspace)
+        workspace_name, org_id, user_id, workspace_visibility)
+    return workspace_schema.jsonify(workspace), 201
 
 
 @api.route('<uuid:workspace_id>', methods=['GET'])
@@ -79,3 +79,33 @@ def get_experiments(workspace_id: UUID):
 
     experiments = request.services.experiment.get_by_workspace(workspace_id)
     return experiments_schema.jsonify(experiments)
+
+
+@api.route('<string:workspace_id>/collaborators', methods=["GET"])
+@login_required
+def collaborator_settings(workspace_id: UUID):
+    user_id = current_user.id
+    workspace = request.services.account.workspace.get(workspace_id)
+    if not workspace:
+        return abort(404)
+    collaborators = request.storage.workspace.get_collaborators(workspace.id)
+    return workspace_collaborators_schema.jsonify(collaborators)
+
+
+@api.route('lookup/<string:workspace_name>', methods=['GET'])
+@login_required
+def lookup_workspace(workspace_name: str):
+    org_name = request.args.get("org")
+    if not org_name:
+        return abort(404)
+
+    org = request.services.account.workspace.get_by_name(org_name)
+    if not org:
+        return abort(404)
+
+    workspace = request.services.account.workspace.get_by_name(
+        org.id, workspace_name)
+    if not workspace:
+        return abort(404)
+
+    return workspace_schema.jsonify(workspace)

@@ -30,6 +30,7 @@ def new():
 @login_required
 def get(user_id: UUID):
     user = request.storage.user.get(user_id)
+    print(user)
     if not user:
         return abort(404)
     return user_schema.jsonify(user)

@@ -27,7 +27,7 @@ class WorkspacesMembers(Base):  # type: ignore
     user_id = Column(
         UUIDType(binary=False), ForeignKey('user.id'), primary_key=True)
     is_owner = Column(Boolean(name='is_owner'), default=False)
-    account = relationship('User')
+    user = relationship('User')
     workspace = relationship('Workspace')
 
     @staticmethod
@@ -35,7 +35,7 @@ class WorkspacesMembers(Base):  # type: ignore
                session: Session) -> 'WorkspacesMembers':
         assoc = WorkspacesMembers(
             workspace=workspace,
-            account=user,
+            user=user,
             is_owner=owner
         )
         session.add(assoc)
@@ -61,6 +61,12 @@ class WorkspacesMembers(Base):  # type: ignore
             filter_by(user_id=user_id).\
             first()
 
+    @staticmethod
+    def get_by_workspace(workspace_id: Union[UUID, str], 
+                         session: Session) -> 'WorkspacesMembers':
+        return session.query(WorkspacesMembers).\
+            filter_by(workspace_id=workspace_id).\
+            all()
 
 class WorkspaceType(Enum):
     personal = "personal"
@@ -89,14 +95,8 @@ class WorkspaceType(Enum):
 
 DEFAULT_WORKSPACE_SETTINGS = {
     "visibility": {
-        "execution": {
-            "anonymous": ExecutionVisibility.none.value,
-            "members": ExecutionVisibility.full.value
-        },
-        "experiment": {
-            "anonymous": ExperimentVisibility.public.value,
-            "members": ExperimentVisibility.public.value,
-        }
+        "execution": ExecutionVisibility.none.value,
+        "experiment": ExperimentVisibility.public.value
     }
 }
 
@@ -126,8 +126,16 @@ class Workspace(Base):  # type: ignore
         return session.query(Workspace).all()
 
     @staticmethod
-    def load(workspace_id: Union[UUID, str], session: Session) -> 'Org':
+    def load(workspace_id: Union[UUID, str], session: Session) -> 'Workspace':
         return session.query(Workspace).filter_by(id=workspace_id).first()
+
+    @staticmethod
+    def load_by_name(org_id: Union[UUID, str],
+                     workspace_name: str, session: Session) -> 'Workspace':
+        name = workspace_name.lower()
+        return session.query(Workspace).\
+            filter_by(org_id=org_id).\
+            filter_by(name_lower=name).first()
 
     @staticmethod
     def create(user: User, org: Org, workspace_name: str, workspace_type: str,
@@ -155,3 +163,31 @@ class Workspace(Base):  # type: ignore
 
         if workspace:
             session.delete(workspace)
+
+    @staticmethod
+    def load_by_user(user_id: Union[UUID, str],
+                     session: Session) -> List['Workspace']:
+        return session.query(Workspace).\
+            filter(Workspace.id.in_(
+                session.query(WorkspacesMembers.workspace_id).\
+                    filter_by(user_id=user_id)
+            )).all()
+
+    def is_collaborator(self, user_id: Union[str, uuid.UUID]) -> bool:
+        """
+        Return `True` when the given account is a collaborator of the
+        workspace
+        """
+        return WorkspacesMembers.query.filter(
+            WorkspacesMembers.workspace_id==self.id,
+            WorkspacesMembers.user_id==user_id).first() is not None
+
+    def is_owner(self, user_id: Union[str, uuid.UUID]) -> bool:
+        """
+        Return `True` when the given account is an owner of the workspace
+        """
+        return WorkspacesMembers.query.filter(
+            WorkspacesMembers.workspace_id==self.id,
+            WorkspacesMembers.is_owner==True,
+            WorkspacesMembers.user_id==user_id).first() is not None
+

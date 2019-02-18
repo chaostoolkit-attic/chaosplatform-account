@@ -23,23 +23,23 @@ def create_api(config: Dict[str, Any]) -> Flask:
     app = Flask(__name__)
 
     app.url_map.strict_slashes = False
-    app.debug = True if os.getenv('CHAOSHUB_DEBUG') else False
+    app.debug = config.get("debug", False)
 
     logger = logging.getLogger('flask.app')
     logger.propagate = False
 
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URI")
-    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
-    app.secret_key = app.config["SECRET_KEY"]
+    app.config["SECRET_KEY"] = config["http"]["secret_key"]
+    app.secret_key = config["http"]["secret_key"]
+    app.config["JWT_SECRET_KEY"] = config["jwt"]["secret_key"]
+    app.config["SQLALCHEMY_DATABASE_URI"] = config["db"]["uri"]
 
-    app.config["GRPC_ADDR"] = "{}:{}".format(
-        os.getenv("GRPC_LISTEN_ADDR"), os.getenv("GRPC_LISTEN_PORT"))
-
-    app.config["CACHE_TYPE"] = os.getenv("CACHE_TYPE", "simple")
+    app.config["CACHE_TYPE"] = config["cache"].get("type", "simple")
     if app.config["CACHE_TYPE"] == "redis":
-        app.config["CACHE_REDIS_HOST"] = os.getenv("CACHE_REDIS_HOST")
-        app.config["CACHE_REDIS_PORT"] = os.getenv("CACHE_REDIS_PORT", 6379)
+        redis_config = config["cache"]["redis"]
+        app.config["CACHE_REDIS_HOST"] = redis_config.get("host")
+        app.config["CACHE_REDIS_PORT"] = redis_config.get("port", 6379)
+        app.config["CACHE_REDIS_DB"] = redis_config.get("db", 0)
+        app.config["CACHE_REDIS_PASSWORD"] = redis_config.get("password")
 
     setup_jwt(app)
     setup_schemas(app)
