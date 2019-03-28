@@ -103,6 +103,11 @@ def run_forever(config: Dict[str, Any]):
     cherrypy.engine.subscribe(
         'start', lambda: run_stuff(config), priority=80)
 
+    if "tls" in config["http"]:
+        cherrypy.server.ssl_module = 'builtin'
+        cherrypy.server.ssl_certificate = config["http"]["tls"]["certificate"]
+        cherrypy.server.ssl_private_key = config["http"]["tls"]["key"]
+
     cherrypy.engine.signals.subscribe()
     cherrypy.engine.start()
     cherrypy.engine.block()

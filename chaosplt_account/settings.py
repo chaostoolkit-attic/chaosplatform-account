@@ -21,8 +21,8 @@ def load_settings(toml_path: str):
     cherrypy_config = config["http"].get("cherrypy", {})
     cherrypy.engine.unsubscribe('graceful', cherrypy.log.reopen_files)
     cherrypy.config.update({
-        'server.socket_host': server_addr,
-        'server.socket_port': server_addr,
+        'server.socket_host': host,
+        'server.socket_port': int(port),
         'engine.autoreload.on': False,
         'log.screen': debug,
         'log.access_file': cherrypy_config.get("access_file", ""),
