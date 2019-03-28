@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import logging
 from logging import StreamHandler
-import os
 from typing import Any, Dict
 
 from flask import Blueprint, Flask, after_this_request, request, Response
@@ -43,7 +42,7 @@ def create_api(config: Dict[str, Any]) -> Flask:
 
     setup_jwt(app)
     setup_schemas(app)
-    setup_login(app, from_jwt=True)
+    setup_login(app, from_jwt=True, from_session=False)
 
     return app
 
@@ -55,20 +54,23 @@ def cleanup_api(app: Flask):
 def serve_api(app: Flask, cache: Cache, services: Services,
               storage: AccountStorage, config: Dict[str, Any],
               mount_point: str = '', log_handler: StreamHandler = None):
-    register_api(app, cache, services, storage)
+    register_api(app, cache, services, storage, mount_point)
 
 
 ###############################################################################
 # Internals
 ###############################################################################
-def register_api(app: Flask, cache: Cache, services, storage: AccountStorage):
+def register_api(app: Flask, cache: Cache, services, storage: AccountStorage,
+                 mount_point: str):
     patch_request(user_api, services, storage)
     patch_request(org_api, services, storage)
     patch_request(workspace_api, services, storage)
 
-    app.register_blueprint(user_api, url_prefix="/users")
-    app.register_blueprint(org_api, url_prefix="/organizations")
-    app.register_blueprint(workspace_api, url_prefix="/workspaces")
+    app.register_blueprint(user_api, url_prefix="{}/users".format(mount_point))
+    app.register_blueprint(
+        org_api, url_prefix="{}/organizations".format(mount_point))
+    app.register_blueprint(
+        workspace_api, url_prefix="{}/workspaces".format(mount_point))
 
 
 def patch_request(bp: Blueprint, services, storage: AccountStorage):

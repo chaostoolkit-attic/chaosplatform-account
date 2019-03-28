@@ -9,7 +9,7 @@ from sqlalchemy import Boolean, Column, DateTime, ForeignKey, \
     String, func
 from sqlalchemy.orm import backref, relationship
 from sqlalchemy.orm.session import Session
-from sqlalchemy_utils import EncryptedType, UUIDType
+from sqlalchemy_utils import EncryptedType, PasswordType, UUIDType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
 from sqlalchemy_utils import JSONType as JSONB
 
@@ -28,7 +28,7 @@ class User(Base, UserMixin):  # type: ignore
     is_active = Column(Boolean(name='is_active'), default=True)
     is_authenticated = Column(Boolean(name="is_authenticated"), default=False)
     is_anonymous = Column(Boolean(name="is_anonymous"), default=False)
-
+    is_local = Column(Boolean(name="is_local"), default=False)
     info = relationship(
         'UserInfo', backref='user', uselist=False,
         cascade="all, delete-orphan")
@@ -56,6 +56,7 @@ class User(Base, UserMixin):  # type: ignore
                session: Session) -> 'User':
         info = UserInfo(
             username=username,
+            lower_username=username.lower(),
             fullname=name,
             details={
                 "email": email
@@ -93,14 +94,27 @@ class UserInfo(Base):  # type: ignore
         DateTime(), server_default=func.now(),
         onupdate=func.current_timestamp())
     verified_email = Column(Boolean(name='verified_email'), default=False)
+    password = Column(
+        PasswordType(schemes=['pbkdf2_sha512']), unique=False, nullable=True)
 
     # values for search purpose mostly
     username = Column(String, index=True, nullable=True)
+    lower_username = Column(String, index=True, nullable=True)
     fullname = Column(String, index=True, nullable=True)
 
     details = Column(
         EncryptedType(
             JSONB, get_secret_key, AesEngine, 'pkcs5'))
+
+    @staticmethod
+    def load_by_userid(user_id: Union[UUID, str],
+                       session: Session) -> 'UserInfo':
+        return session.query(UserInfo).filter_by(user_id=user_id).first()
+
+    @staticmethod
+    def load_by_username(username: str, session: Session) -> 'UserInfo':
+        return session.query(UserInfo).filter_by(
+            lower_username=username.lower()).first()
 
 
 class UserPrivacy(Base):  # type: ignore

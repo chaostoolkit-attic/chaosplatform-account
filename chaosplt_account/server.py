@@ -30,6 +30,13 @@ def initialize_all(config: Dict[str, Any], web_app: Flask = None,
                    api_mount_point: str = "/api/v1",
                    access_log_handler: StreamHandler = None) \
                    -> Tuple[Flask, Flask, Services, Server, AccountStorage]:
+    """
+    Initialize the account service and its resources.
+
+    When only the `config` is provided, the function initializes the web and
+    API Flask applications. Pass them directly if you want to extend them with
+    the account service endpoints otherwise.
+    """
     access_log_handler = access_log_handler or logging.StreamHandler()
     logger.info("Initializing account service resources")
 
@@ -62,14 +69,7 @@ def initialize_all(config: Dict[str, Any], web_app: Flask = None,
         api_app, api_cache, services, storage, config, api_mount_point,
         log_handler=access_log_handler)
 
-    if not grpc_server:
-        srv_addr = config["GRPC_LISTEN_ADDR"]
-        if srv_addr:
-            grpc_server = create_grpc_server(srv_addr)
-            start_grpc_server(grpc_server)
-            logger.info("gRPC server started on {}".format(srv_addr))
-
-        register_registration_service(RegistrationRPC(storage), grpc_server)
+    grpc_server = initialize_grpc(config, storage, grpc_server)
 
     return (web_app, api_app, services, grpc_server, storage)
 
@@ -106,3 +106,25 @@ def run_forever(config: Dict[str, Any]):
     cherrypy.engine.signals.subscribe()
     cherrypy.engine.start()
     cherrypy.engine.block()
+
+
+###############################################################################
+# Internals
+###############################################################################
+def initialize_grpc(config: Dict[str, Any], storage: AccountStorage,
+                    grpc_server: Server = None) -> Server:
+    """
+    Initialize the gRPC server
+
+    Create the server if not provided. This is called by `initialize_all`.
+    """
+    if not grpc_server:
+        srv_addr = config.get("grpc", {}).get("address")
+        if srv_addr:
+            grpc_server = create_grpc_server(srv_addr)
+            start_grpc_server(grpc_server)
+            logger.info("gRPC server started on {}".format(srv_addr))
+
+    register_registration_service(RegistrationRPC(storage), grpc_server)
+
+    return grpc_server

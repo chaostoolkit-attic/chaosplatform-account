@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 from uuid import UUID
 
-from flask import abort, Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_login import current_user, login_required
-from marshmallow import ValidationError
 
-from chaosplt_account.schemas import new_org_schema, org_schema, \
-    link_workspace_schema, org_schema_short, orgs_schema_tiny, \
-    workspaces_schema, workspace_schema
+from chaosplt_account.api.org import list_all_orgs, create_org, get_org, \
+    delete_org, get_org_workspaces, link_workspace_to_org, add_member, \
+    unlink_workspace_from_org, lookup_org, get_members, get_member, \
+    set_org_name
 
 __all__ = ["api"]
 
@@ -16,107 +16,81 @@ api = Blueprint("org", __name__)
 
 @api.route('', methods=['GET'])
 @login_required
-def list_all():
-    orgs = request.services.account.org.list_all()
-    return orgs_schema_tiny.jsonify(orgs)
+def api_list_all():
+    return list_all_orgs(request.services, current_user)
 
 
 @api.route('', methods=['POST'])
 @login_required
-def new():
-    user_id = current_user.id
-    try:
-        payload = new_org_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 422
+def api_new():
+    return create_org(request.services, current_user, request.json)
 
-    org_name = payload["name"]
 
-    has_org = request.services.account.org.has_org_by_name(org_name)
-    if has_org:
-        return jsonify({
-            "name": ["Name already used"]
-        }), 409
-
-    org = request.services.account.org.create(org_name, user_id)
-    return org_schema.jsonify(org), 201
+@api.route('', methods=['POST'])
+@login_required
+def update():
+    return create_org(request.services, current_user, request.json)
 
 
 @api.route('<uuid:org_id>', methods=['GET'])
 @login_required
-def get(org_id: UUID):
-    org = request.services.account.org.get(org_id)
-    if not org:
-        return abort(404)
-    return org_schema_short.jsonify(org)
+def get_one(org_id: UUID):
+    return get_org(request.services, current_user, org_id)
 
 
 @api.route('<uuid:org_id>', methods=['DELETE'])
 @login_required
-def delete(org_id: UUID):
-    request.services.account.org.delete(org_id)
-    return "", 204
+def api_delete(org_id: UUID):
+    return delete_org(request.services, current_user, org_id)
 
 
-@api.route('<uuid:user_id>/workspaces', methods=['GET'])
+@api.route('<uuid:org_id>/workspaces', methods=['GET'])
 @login_required
-def get_user_workspaces(org_id: UUID):
-    org = request.services.account.org.get(org_id)
-    if not org:
-        return abort(404)
-    return workspaces_schema.jsonify(org.workspaces)
+def api_get_org_workspaces(org_id: UUID):
+    return get_org_workspaces(request.services, current_user, org_id)
 
 
 @api.route('<uuid:org_id>/workspaces/<uuid:workspace_id>', methods=['PUT'])
 @login_required
-def link_workspace_to_org(org_id: UUID, workspace_id: UUID):
-    try:
-        payload = link_workspace_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 422
-
-    org = request.services.account.org.get(org_id)
-    if not org:
-        return abort(404)
-
-    workspace = request.services.account.workspace.get(workspace_id)
-    if not workspace:
-        return abort(404)
-
-    request.services.account.org.add_workspace(
-        org_id, workspace_id, owner=payload["owner"])
-    return "", 204
+def api_link_workspace_to_org(org_id: UUID, workspace_id: UUID):
+    return link_workspace_to_org(
+        request.services, current_user, org_id, workspace_id)
 
 
 @api.route('<uuid:org_id>/organizations/<uuid:workspace_id>',
            methods=['DELETE'])
 @login_required
-def unlink_workspace_from_org(org_id: UUID, workspace_id: UUID):
-    org = request.services.account.org.get(org_id)
-    if not org:
-        return abort(404)
-
-    workspace = request.services.account.workspace.get(workspace_id)
-    if not workspace:
-        return abort(404)
-
-    request.services.account.org.remove_org(org_id, workspace_id)
-    return "", 204
+def api_unlink_workspace_from_org(org_id: UUID, workspace_id: UUID):
+    return unlink_workspace_from_org(
+        request.services, current_user, org_id, workspace_id)
 
 
 @api.route('lookup/<string:org_name>', methods=['GET'])
 @login_required
-def lookup_org(org_name: str):
-    org = request.services.account.org.get_by_name(org_name)
-    if not org:
-        return abort(404)
+def api_lookup_org(org_name: str):
+    workspaces = request.args.get("workspaces")
+    return lookup_org(request.services, current_user, org_name, workspaces)
 
-    workspaces = request.args.get("workspaces", [])
-    print(workspaces)
-    for workspace_name in workspaces:
-        workspace = request.services.account.workspace.get_by_name(
-            org.id, workspace_name)
-        if not workspace:
-            return abort(404)
 
-    return org_schema.jsonify(org)
+@api.route('<uuid:org_id>/members', methods=["GET"])
+@login_required
+def api_get_members(org_id: UUID):
+    return get_members(request.services, current_user, org_id)
+
+
+@api.route('<uuid:org_id>/members/<uuid:user_id>', methods=["GET"])
+@login_required
+def api_get_member(org_id: UUID, user_id: UUID):
+    return get_member(request.services, current_user, org_id, user_id)
+
+
+@api.route('<uuid:org_id>/name', methods=["PATCH"])
+@login_required
+def update_org_name(org_id: UUID):
+    return set_org_name(request.services, current_user, org_id, request.json)
+
+
+@api.route('<uuid:org_id>/members/<uuid:user_id>', methods=["PUT"])
+@login_required
+def api_add_member(org_id: UUID, user_id: UUID):
+    return add_member(request.services, current_user, org_id, user_id)

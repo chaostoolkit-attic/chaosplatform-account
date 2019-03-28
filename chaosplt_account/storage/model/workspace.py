@@ -5,7 +5,8 @@ import uuid
 from uuid import UUID
 
 from chaosplt_relational_storage.db import Base
-from sqlalchemy import Boolean, Column, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, \
+    UniqueConstraint, func
 from sqlalchemy import Enum as EnumType
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
@@ -62,11 +63,22 @@ class WorkspacesMembers(Base):  # type: ignore
             first()
 
     @staticmethod
-    def get_by_workspace(workspace_id: Union[UUID, str], 
-                         session: Session) -> 'WorkspacesMembers':
+    def get_by_workspace(workspace_id: Union[UUID, str],
+                         session: Session) -> List['WorkspacesMembers']:
         return session.query(WorkspacesMembers).\
             filter_by(workspace_id=workspace_id).\
             all()
+
+    @staticmethod
+    def get_by_workspace_and_collaborator(workspace_id: Union[UUID, str],
+                                          user_id: Union[UUID, str],
+                                          session: Session)\
+            -> 'WorkspacesMembers':
+        return session.query(WorkspacesMembers).\
+            filter_by(workspace_id=workspace_id).\
+            filter_by(user_id=user_id).\
+            first()
+
 
 class WorkspaceType(Enum):
     personal = "personal"
@@ -116,6 +128,7 @@ class Workspace(Base):  # type: ignore
     kind = Column(
         EnumType(WorkspaceType), nullable=False,
         default=WorkspaceType.personal)
+    created_on = Column(DateTime(), server_default=func.now())
     org_id = Column(
         UUIDType(binary=False), ForeignKey('org.id'), nullable=False)
     settings = Column(
@@ -138,7 +151,7 @@ class Workspace(Base):  # type: ignore
             filter_by(name_lower=name).first()
 
     @staticmethod
-    def create(user: User, org: Org, workspace_name: str, workspace_type: str,
+    def create(org: Org, workspace_name: str, workspace_type: str,
                visibility: Dict[str, Dict[str, str]],
                session: Session) -> 'Workspace':
 
@@ -169,25 +182,21 @@ class Workspace(Base):  # type: ignore
                      session: Session) -> List['Workspace']:
         return session.query(Workspace).\
             filter(Workspace.id.in_(
-                session.query(WorkspacesMembers.workspace_id).\
-                    filter_by(user_id=user_id)
-            )).all()
+                session.query(WorkspacesMembers.workspace_id).
+                filter_by(user_id=user_id))).all()
 
     def is_collaborator(self, user_id: Union[str, uuid.UUID]) -> bool:
         """
         Return `True` when the given account is a collaborator of the
         workspace
         """
-        return WorkspacesMembers.query.filter(
-            WorkspacesMembers.workspace_id==self.id,
-            WorkspacesMembers.user_id==user_id).first() is not None
+        return WorkspacesMembers.query.filter_by(
+            workspace_id=self.id, user_id=user_id).first() is not None
 
     def is_owner(self, user_id: Union[str, uuid.UUID]) -> bool:
         """
         Return `True` when the given account is an owner of the workspace
         """
-        return WorkspacesMembers.query.filter(
-            WorkspacesMembers.workspace_id==self.id,
-            WorkspacesMembers.is_owner==True,
-            WorkspacesMembers.user_id==user_id).first() is not None
-
+        return WorkspacesMembers.query.filter_by(
+            workspace_id=self.id, is_owner=True,
+            user_id=user_id).first() is not None

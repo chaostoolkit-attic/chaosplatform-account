@@ -61,11 +61,20 @@ class OrgsMembers(Base):  # type: ignore
             first()
 
     @staticmethod
-    def get_by_org(org_id: Union[UUID, str], 
+    def get_by_org(org_id: Union[UUID, str],
                    session: Session) -> 'OrgsMembers':
         return session.query(OrgsMembers).\
             filter_by(org_id=org_id).\
             all()
+
+    @staticmethod
+    def get_by_org_and_member(org_id: Union[UUID, str],
+                              user_id: Union[UUID, str],
+                              session: Session) -> 'OrgsMembers':
+        return session.query(OrgsMembers).\
+            filter_by(org_id=org_id).\
+            filter_by(user_id=user_id).\
+            first()
 
 
 class OrgType(Enum):
@@ -128,8 +137,7 @@ class Org(Base):  # type: ignore
                      session: Session) -> List['Org']:
         return session.query(Org).\
             filter(Org.id.in_(
-                session.query(OrgsMembers.org_id).\
-                    filter_by(user_id=user_id)
+                session.query(OrgsMembers.org_id).filter_by(user_id=user_id)
             )).all()
 
     @staticmethod
@@ -178,15 +186,13 @@ class Org(Base):  # type: ignore
         """
         Return `True` when the given account is a member of the organization
         """
-        return OrgsMembers.query.filter(
-            OrgsMembers.org_id==self.id,
-            OrgsMembers.user_id==user_id).first() is not None
+        return OrgsMembers.query.filter_by(
+            org_id=self.id, user_id=user_id).first() is not None
 
     def is_owner(self, user_id: Union[str, uuid.UUID]) -> bool:
         """
         Return `True` when the given account is an owner of the organization
         """
-        return OrgsMembers.query.filter(
-            OrgsMembers.org_id==self.id, OrgsMembers.is_owner==True,
-            OrgsMembers.user_id==user_id).first() is not None
-
+        return OrgsMembers.query.filter_by(
+            org_id=self.id, is_owner=True,
+            user_id=user_id).first() is not None

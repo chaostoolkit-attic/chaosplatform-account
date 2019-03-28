@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 import logging
 from logging import StreamHandler
-import os
-from typing import Any, Dict, Union
-from uuid import UUID
+from typing import Any, Dict
 
 from flask import Blueprint, Flask, request, Response, after_this_request
 from flask_caching import Cache
-from flask_jwt_extended import JWTManager, get_jti
 
 from chaosplt_account.auth import setup_login
 from chaosplt_account.service import Services
@@ -42,7 +39,7 @@ def create_app(config: Dict[str, Any]) -> Flask:
         app.config["CACHE_REDIS_DB"] = redis_config.get("db", 0)
         app.config["CACHE_REDIS_PASSWORD"] = redis_config.get("password")
 
-    setup_login(app, from_session=True)
+    setup_login(app, from_session=True, from_jwt=False)
 
     return app
 
@@ -55,35 +52,24 @@ def serve_app(app: Flask, cache: Cache, services: Services,
               storage: AccountStorage, config: Dict[str, Any],
               mount_point: str = '/account',
               log_handler: StreamHandler = None):
-    # special case for generating JWT tokens
-    jwt = JWTManager(app)
-
-    @jwt.token_in_blacklist_loader
-    def check_if_token_in_blacklist(decrypted_token):
-        return False
-
-    @jwt.user_claims_loader
-    def add_claims(identity: Union[UUID, str]) -> Dict[str, Any]:
-        return {
-            'user_id': str(identity)
-        }
-
     register_views(app, cache, services, storage, mount_point)
 
 
 ###############################################################################
 # Internals
 ###############################################################################
-def register_views(app: Flask, cache: Cache, services,
+def register_views(app: Flask, cache: Cache, services: Services,
                    storage: AccountStorage, mount_point: str):
     patch_request(user_view, services, storage)
     patch_request(org_view, services, storage)
+    patch_request(workspace_view, services, storage)
 
-    app.register_blueprint(user_view, url_prefix="{}/user".format(mount_point))
-    app.register_blueprint(org_view, url_prefix="{}/orgs".format(mount_point))
+    app.register_blueprint(user_view, url_prefix="/users")
+    app.register_blueprint(org_view, url_prefix="/organizations")
+    app.register_blueprint(workspace_view, url_prefix="/workspaces")
 
 
-def patch_request(bp: Blueprint, services, storage: AccountStorage):
+def patch_request(bp: Blueprint, services: Services, storage: AccountStorage):
     @bp.before_request
     def prepare_request():
         request.services = services

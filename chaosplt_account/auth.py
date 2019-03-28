@@ -7,7 +7,7 @@ from flask_login import LoginManager
 from flask_jwt_extended import JWTManager, verify_jwt_in_request, \
     current_user as api_user
 
-from .model import User
+from .model import anonymous_user, User
 
 __all__ = ["setup_jwt", "setup_login"]
 
@@ -37,7 +37,11 @@ def setup_login(app: Flask, from_session: bool = False,
     if from_session:
         @login_manager.user_loader
         def load_user_from_session(user_id: Union[UUID, str]) -> User:
-            return request.storage.registration.get(user_id)
+            user = request.storage.registration.get(user_id)
+            if not user:
+                request._session_user_is_anonymous = True
+                user = anonymous_user
+            return user
 
     if from_jwt:
         @login_manager.request_loader

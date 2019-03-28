@@ -1,104 +1,63 @@
 # -*- coding: utf-8 -*-
 from uuid import UUID
 
-from flask import abort, Blueprint, jsonify, request
+from flask import Blueprint, request
 from flask_login import current_user, login_required
-from marshmallow import ValidationError
 
-from chaosplt_account.schemas import org_dashboard_schema, org_info_schema, \
-    org_members_dashboard_schema, org_settings_schema, org_name_schema, \
-    workspace_dashboard_schema, workspace_info_schema
+from chaosplt_account.api.workspace import \
+    create_workspace, get_workspace, get_workspace_experiments, \
+    get_workspace_collaborators, get_workspace_collaborator, \
+    lookup_workspace_by_name, get_workspace_experiment
 
-from .org import view
+view = Blueprint("workspace", __name__)
+
 
 __all__ = ["view"]
 
 
-@view.route('<string:org_name>/<string:workspace_name>', methods=["GET"])
+@view.route('<uuid:workspace_id>', methods=['GET'])
 @login_required
-def workspace(org_name: str, workspace_name: str):
-    org = request.storage.org.get_by_name(org_name)
-    if not org:
-        return abort(404)
-
-    workspace = request.storage.workspace.get_by_name(org.id, workspace_name)
-    if not workspace:
-        return abort(404)
-
-    org.owner = False
-    org.member = False
-    user_id = current_user.id
-    user = request.storage.user.get(user_id)
-    if user:
-        org.owner = request.storage.org.is_owner(org.id, user_id)
-        org.member = request.storage.org.is_member(org.id, user_id)
-
-    workspace.owner = False
-    workspace.collaborator = False
-    if user:
-        workspace.owner = request.storage.workspace.is_owner(
-            workspace.id, user_id)
-        workspace.collaborator = request.storage.workspace.is_collaborator(
-            workspace.id, user_id)
-
-    return workspace_info_schema.jsonify(workspace)
+def get_one(workspace_id: UUID):
+    return get_workspace(request.services, workspace_id)
 
 
-@view.route('<string:org_name>/<string:workspace_name>/settings/general',
+@view.route('', methods=['POST'])
+@login_required
+def view_new():
+    return create_workspace(request.services, current_user, request.json)
+
+
+@view.route('<uuid:workspace_id>/collaborators', methods=["GET"])
+@login_required
+def view_collaborator_settings(workspace_id: UUID):
+    return get_workspace_collaborators(
+        request.services, current_user, workspace_id)
+
+
+@view.route('<uuid:workspace_id>/collaborators/<uuid:user_id>',
             methods=["GET"])
 @login_required
-def workspace_general_settings(org_name: str, workspace_name: str):
-    user_id = current_user.id
-    user = request.storage.user.get(user_id)
-    if not user:
-        return abort(404)
-
-    org = request.storage.org.get_by_name(org_name)
-    if not org:
-        return abort(404)
-    
-    owns_org = request.storage.org.is_owner(org.id, user_id)
-    if not owns_org:
-        return abort(404)
-
-    org.owner = True
-    org.member = True
-
-    workspace = request.storage.workspace.get_by_name(org.id, workspace_name)
-    if not workspace:
-        return abort(404)
-
-    workspace.owner = request.storage.workspace.is_owner(workspace.id, user_id)
-    workspace.collaborator = request.storage.workspace.is_collaborator(
-        workspace.id, user_id)
-
-    return workspace_dashboard_schema.jsonify(workspace)
+def view_get_collaborator(workspace_id: UUID, user_id: UUID):
+    return get_workspace_collaborator(
+        request.services, current_user, workspace_id, user_id)
 
 
-@view.route('<string:org_name>/<string:workspace_name>/settings/general',
-            methods=["PATCH"])
+@view.route('lookup/<string:workspace_name>', methods=['GET'])
 @login_required
-def update_workspace_details(org_name: str, workspace_name: str):
-    user_id = current_user.id
-    org = request.storage.org.get_by_name(org_name)
-    if not org:
-        return abort(404)
+def view_lookup_workspace(workspace_name: str):
+    org_name = request.args.get("org")
+    return lookup_workspace_by_name(
+        request.services, current_user, org_name, workspace_name)
 
-    owns_org = request.storage.org.is_owner(org.id, user_id)
-    if not owns_org:
-        return abort(404)
 
-    try:
-        payload = org_settings_schema.load(request.json)
-    except ValidationError as err:
-        return jsonify(err.messages), 422
+@view.route('<uuid:workspace_id>/experiments', methods=['GET'])
+def view_get_user_experiments(workspace_id: UUID):
+    return get_workspace_experiments(
+        request.services, current_user, workspace_id)
 
-    if org.settings is None:
-        org.settings = {}
-    org.settings["email"] = payload.get("email")
-    org.settings["url"] = payload.get("url")
-    org.settings["logo"] = payload.get("logo")
-    org.settings["description"] = payload.get("description")
-    request.storage.org.save(org)
 
-    return jsonify(""), 200
+@view.route('<uuid:workspace_id>/experiments/<uuid:experiment_id>',
+            methods=['GET'])
+def view_get_user_experiment(workspace_id: UUID, experiment_id: UUID):
+    return get_workspace_experiment(
+        request.services, current_user, workspace_id, experiment_id)

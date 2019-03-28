@@ -15,7 +15,28 @@ class BaseRegistrationService(ABC):
         raise NotImplementedError()
 
     @abstractmethod
+    def get_by_username(self, username: str) -> User:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def lookup(self, username: str) -> List[User]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def has_by_username(self, username: str) -> bool:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def validate_password(self, user_id: Union[UUID, str],
+                          password: str) -> bool:
+        raise NotImplementedError()
+
+    @abstractmethod
     def create(self, username: str, name: str, email: str) -> User:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def create_local(self, username: str, password: str) -> User:
         raise NotImplementedError()
 
     @abstractmethod
@@ -76,12 +97,11 @@ class BaseOrganizationService(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_by_name(self, org_name: str) -> Organization:
+    def get_many(self, org_ids: List[Union[UUID, str]]) -> List[Organization]:
         raise NotImplementedError()
 
     @abstractmethod
-    def get_members(self, org_id: Union[UUID, str]) \
-        -> List[OrganizationMember]:
+    def get_by_name(self, org_name: str) -> Organization:
         raise NotImplementedError()
 
     @abstractmethod
@@ -134,6 +154,21 @@ class BaseOrganizationService(ABC):
                  user_id: Union[str, UUID]) -> bool:
         raise NotImplementedError()
 
+    @abstractmethod
+    def get_members(self, org_id: Union[UUID, str]) \
+            -> List[OrganizationMember]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_member(self, org_id: Union[UUID, str],
+                   user_id: Union[str, UUID]) -> OrganizationMember:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def add_member(self, org_id: Union[UUID, str],
+                   user_id: Union[str, UUID]) -> OrganizationMember:
+        raise NotImplementedError()
+
 
 class BaseWorkspaceService(ABC):
     @abstractmethod
@@ -142,6 +177,11 @@ class BaseWorkspaceService(ABC):
 
     @abstractmethod
     def get(self, workspace_id: Union[UUID, str]) -> Workspace:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_many(self, workspace_ids: List[Union[UUID, str]]) \
+            -> List[Workspace]:
         raise NotImplementedError()
 
     @abstractmethod
@@ -156,7 +196,8 @@ class BaseWorkspaceService(ABC):
     @abstractmethod
     def create(self, name: str, org_id: Union[UUID, str],
                user_id: Union[UUID, str],
-               visibility: Dict[str, Dict[str, str]]) -> Workspace:
+               visibility: Dict[str, Dict[str, str]],
+               workspace_type: str = "public") -> Workspace:
         raise NotImplementedError()
 
     @abstractmethod
@@ -165,7 +206,12 @@ class BaseWorkspaceService(ABC):
 
     @abstractmethod
     def get_collaborators(self, workspace_id: Union[UUID, str]) \
-        -> List[WorkspaceCollaborator]:
+            -> List[WorkspaceCollaborator]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_collaborator(self, workspace_id: Union[UUID, str],
+                         user_id: Union[str, UUID]) -> WorkspaceCollaborator:
         raise NotImplementedError()
 
     @abstractmethod

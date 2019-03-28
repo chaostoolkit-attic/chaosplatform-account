@@ -1,0 +1,38 @@
+[chaosplatform]
+debug = true
+
+    [chaosplatform.http]
+    address = "0.0.0.0:8090"
+    secret_key = "whatever"
+
+        [chaosplatform.http.cherrypy]
+        proxy = "http://localhost:6080"
+        environment = "production"
+
+    [chaosplatform.cache]
+    type = "simple"
+
+    [chaosplatform.db]
+    uri = "sqlite:///:memory:"
+
+    [chaosplatform.jwt]
+    secret_key = "jwt_whatever"
+    public_key = "whatever"
+    algorithm = "HS256"
+    identity_claim_key = "identity"
+    user_claims_key = "user_claims"
+    access_token_expires = 2592000
+    refresh_token_expires = 1800
+    user_claims_in_refresh_token = true
+        
+    [chaosplatform.grpc]
+    address = "0.0.0.0:50051"
+
+        [chaosplatform.grpc.auth]
+        address = "0.0.0.0:50051"
+
+        [chaosplatform.grpc.activity]
+        address = "0.0.0.0:50051"
+
+        [chaosplatform.grpc.scheduling]
+        address = "0.0.0.0:50051"

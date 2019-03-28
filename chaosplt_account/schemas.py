@@ -7,7 +7,7 @@ from marshmallow import fields, post_load
 from .model import User
 
 __all__ = ["org_schema", "user_schema", "workspace_schema", "new_user_schema",
-           "orgs_schema", "ma", "link_org_schema", "link_workspace_schema",
+           "orgs_schema", "ma", "link_workspace_schema",
            "new_workspace_schema", "workspaces_schema", "orgs_schema_tiny",
            "org_schema_short", "workspaces_schema_tiny", "my_orgs_schema",
            "workspace_schema_short", "my_workspaces_schema",
@@ -16,11 +16,13 @@ __all__ = ["org_schema", "user_schema", "workspace_schema", "new_user_schema",
            "user_profile_schema", "access_token_schema", "org_name_schema",
            "access_tokens_schema", "new_access_token_schema",
            "created_access_token_schema", "profile_new_org_schema",
-           "profile_org_schema", "org_dashboard_schema", "org_settings_schema",
-           "org_members_dashboard_schema", "org_info_schema",
+           "profile_org_schema", "org_settings_schema",
+           "org_info_schema", "link_org_schema",
            "profile_workspace_schema", "profile_workspaces_schema",
-           "profile_new_workspace_schema", "workspace_dashboard_schema",
-           "workspace_collaborators_schema"]
+           "profile_new_workspace_schema",
+           "workspace_collaborators_schema", "current_user_schema",
+           "schedules_schema", "experiment_schema",
+           "light_access_tokens_schema"]
 
 ma = Marshmallow()
 
@@ -41,7 +43,9 @@ class WorkspaceSchema(ma.Schema):
         required=True,
         validate=lambda k: k in ("personal", "protected", "public")
     )
+    created_on = fields.DateTime()
     owner = fields.Boolean(default=False)
+    member = fields.Boolean(default=False)
     visibility = fields.Dict(
         keys=fields.Str(validate=lambda k: k in ("execution", "experiment")),
         values=fields.String(
@@ -51,9 +55,9 @@ class WorkspaceSchema(ma.Schema):
             )
         )
     )
-    url = ma.AbsoluteURLFor('workspace.get', workspace_id='<id>')
+    url = ma.AbsoluteURLFor('workspace.get_one', workspace_id='<id>')
     links = ma.Hyperlinks({
-        'self': ma.URLFor('workspace.get', workspace_id='<id>')
+        'self': ma.URLFor('workspace.get_one', workspace_id='<id>')
     })
 
 
@@ -62,8 +66,9 @@ class NewWorkspaceSchema(ma.Schema):
     org = fields.UUID(required=True)
     kind = fields.String(
         data_key="type",
-        missing="collaborative",
-        validate=lambda k: k in ("personal", "collaborative")
+        attribute="type",
+        missing="public",
+        validate=lambda k: k in ("personal", "protected", "public")
     )
     visibility = fields.Dict(
         keys=fields.Str(validate=lambda k: k in ("execution", "experiment")),
@@ -85,6 +90,20 @@ class OrgSettingsSchema(ma.Schema):
     url = fields.URL(allow_none=True)
     logo = fields.URL(allow_none=True)
     email = fields.Email(allow_none=True)
+    visibility = fields.Dict(
+        allow_none=True,
+        keys=fields.Str(validate=lambda k: k in ("execution", "experiment")),
+        values=fields.Dict(
+            keys=fields.Str(
+                validate=lambda k: k in ("anonymous", "members")),
+            values=fields.String(
+                validate=lambda v: v in (
+                    "private", "protected", "public",
+                    "none", "status", "full"
+                )
+            )
+        )
+    )
 
 
 class OrganizationSchema(ma.Schema):
@@ -93,12 +112,14 @@ class OrganizationSchema(ma.Schema):
     id = fields.UUID(required=True)
     name = fields.String(required=True)
     owner = fields.Boolean(default=False)
+    member = fields.Boolean(default=False)
     created_on = fields.DateTime()
     kind = fields.String(data_key="type", required=True)
     workspaces = fields.Nested(WorkspaceSchema, many=True)
-    url = ma.AbsoluteURLFor('org.get', org_id='<id>')
+    settings = fields.Raw(allow_none=True)
+    url = ma.AbsoluteURLFor('org.get_one', org_id='<id>')
     links = ma.Hyperlinks({
-        'self': ma.URLFor('org.get', org_id='<id>')
+        'self': ma.URLFor('org.get_one', org_id='<id>')
     })
 
 
@@ -130,6 +151,16 @@ class WorkspaceCollaboratorSchema(ma.Schema):
     workspace_name = fields.String()
 
 
+class OrgMemberSchema(ma.Schema):
+    id = fields.UUID()
+    username = fields.String()
+    fullname = fields.String()
+    owner = fields.Boolean()
+    member = fields.Boolean()
+    org_id = fields.UUID()
+    org_name = fields.String()
+
+
 class UserSchema(ma.Schema):
     class Meta:
         ordered = True
@@ -147,8 +178,21 @@ class UserSchema(ma.Schema):
         return User(**data)
 
 
+class CurrentUserSchema(ma.Schema):
+    class Meta:
+        ordered = True
+    id = fields.UUID(required=False)
+    username = fields.String(required=True)
+    is_active = fields.Boolean(required=True, dump_only=True)
+    is_anonymous = fields.Boolean(required=True, dump_only=True)
+    orgs = fields.Nested(OrganizationSchema, many=True, dump_only=True)
+    workspaces = fields.Nested(WorkspaceSchema, many=True, dump_only=True)
+
+
 class NewUserSchema(ma.Schema):
     username = fields.String(required=True)
+    name = fields.String(required=False, default=None)
+    email = fields.Email(required=False, default=None)
 
 
 class ExperimentSchema(ma.Schema):
@@ -158,8 +202,13 @@ class ExperimentSchema(ma.Schema):
     user_id = fields.UUID(required=True)
     org_id = fields.UUID(required=True)
     workspace_id = fields.UUID(required=True)
+    username = fields.String()
+    user_org_name = fields.String()
+    org_name = fields.String()
+    workspace_name = fields.String()
     created_date = fields.DateTime()
     updated_date = fields.DateTime()
+    payload = fields.Mapping(default=None)
 
 
 class ExecutionSchema(ma.Schema):
@@ -170,20 +219,6 @@ class ExecutionSchema(ma.Schema):
     org_id = fields.UUID(required=True)
     workspace_id = fields.UUID(required=True)
     execution_id = fields.UUID(required=True)
-
-
-class ScheduleSchema(ma.Schema):
-    class Meta:
-        ordered = True
-    id = fields.UUID(required=True)
-    user_id = fields.UUID(required=True)
-    org_id = fields.UUID(required=True)
-    workspace_id = fields.UUID(required=True)
-    experiment_id = fields.UUID(required=True)
-    token_id = fields.UUID(required=True)
-    scheduled = fields.DateTime(required=True)
-    status = fields.String(required=True, default="pending")
-    job_id = fields.UUID(required=False)
 
 
 class CurrentOrgSchema(ma.Schema):
@@ -220,6 +255,17 @@ class AccessTokenSchema(ma.Schema):
     jti = fields.String()
     access_token = fields.String(load_only=True)
     refresh_token = fields.String(load_only=True)
+    revoked = fields.Boolean()
+    issued_on = fields.DateTime()
+    last_used_on = fields.DateTime()
+
+
+class LightAccessTokenSchema(ma.Schema):
+    class Meta:
+        ordered = True
+    id = fields.UUID(required=False)
+    user_id = fields.UUID()
+    name = fields.String()
     revoked = fields.Boolean()
     issued_on = fields.DateTime()
     last_used_on = fields.DateTime()
@@ -280,32 +326,6 @@ class ProfileNewOrganizationSchema(ma.Schema):
     settings = fields.Nested(OrgSettingsSchema)
 
 
-class DashboardOrganizationSchema(ma.Schema):
-    class Meta:
-        ordered = True
-    id = fields.UUID(required=True)
-    name = fields.String(required=True)
-    owner = fields.Boolean(default=False)
-    member = fields.Boolean(default=False)
-    kind = fields.String(data_key="type", required=True)
-    created_on = fields.DateTime()
-    workspaces = fields.Nested(WorkspaceSchema, many=True)
-    settings = fields.Nested(OrgSettingsSchema, allow_none=True)
-
-
-class DashboardOrganizationMemberSchema(ma.Schema):
-    id = fields.UUID()
-    username = fields.String()
-    fullname = fields.String()
-    owner = fields.Boolean()
-    org_name = fields.String()
-
-
-class DashboardOrganizationMembersSchema(ma.Schema):
-    users = fields.Nested(DashboardOrganizationMemberSchema, many=True)
-    paging = fields.Nested(PagingSchema, default={"prev": 1, "next": 1})
-
-
 class WorkspaceInfoSchema(ma.Schema):
     id = fields.UUID(required=True)
     org_id = fields.UUID(required=True)
@@ -353,34 +373,6 @@ class ProfileNewWorkspaceSchema(ma.Schema):
     )
 
 
-class DashboardWorkspaceSchema(ma.Schema):
-    class Meta:
-        ordered = True
-    id = fields.UUID(required=True)
-    org_id = fields.UUID(required=True)
-    org_name = fields.String(required=True)
-    name = fields.String(required=True)
-    owner = fields.Boolean(default=False)
-    collaborator = fields.Boolean(default=False)
-    kind = fields.String(data_key="type", required=True)
-    settings = fields.Nested(OrgSettingsSchema, allow_none=True)
-
-
-class DashboardWorkspaceCollaboratorSchema(ma.Schema):
-    id = fields.UUID()
-    username = fields.String()
-    fullname = fields.String()
-    owner = fields.Boolean()
-    org_name = fields.String()
-    workspace_name = fields.String()
-
-
-class DashboardWorkspaceCollaboratorsSchema(ma.Schema):
-    collaborators = fields.Nested(
-        DashboardWorkspaceCollaboratorSchema, many=True)
-    paging = fields.Nested(PagingSchema, default={"prev": 1, "next": 1})
-
-
 class WorkspaceInfoSchema(ma.Schema):
     class Meta:
         ordered = True
@@ -393,10 +385,43 @@ class WorkspaceInfoSchema(ma.Schema):
     created_on = fields.DateTime()
 
 
+class ActivitySchema(ma.Schema):
+    class Meta:
+        ordered = True
+    id = fields.UUID(required=True)
+    user_id = fields.UUID(required=True)
+    org_id = fields.UUID(required=True)
+    workspace_id = fields.UUID(required=True)
+    execution_id = fields.UUID(required=True)
+
+
+class ScheduleSchema(ma.Schema):
+    class Meta:
+        ordered = True
+    id = fields.UUID(required=True)
+    user_id = fields.UUID(required=True)
+    username = fields.String(required=True)
+    user_org_name = fields.String(required=True)
+    org_id = fields.UUID(required=True)
+    workspace_id = fields.UUID(required=True)
+    experiment_id = fields.UUID(required=True)
+    experiment_name = fields.String(required=True)
+    org_name = fields.String(required=True)
+    workspace_name = fields.String(required=True)
+    token_id = fields.UUID(required=True)
+    job_id = fields.UUID(allow_none=True)
+    created_on = fields.DateTime()
+    active_from = fields.DateTime()
+    active_until = fields.DateTime(allow_none=True)
+    status = fields.String()
+    repeat = fields.Integer(allow_none=True)
+    interval = fields.Integer(allow_none=True)
+    cron = fields.String(allow_none=True)
+    plan = fields.List(fields.DateTime(), allow_none=True)
+
 
 new_user_schema = NewUserSchema()
 user_schema = UserSchema()
-link_org_schema = LinkOrgSchema()
 link_workspace_schema = LinkWorkpaceSchema()
 
 org_schema = OrganizationSchema()
@@ -406,6 +431,7 @@ orgs_schema_tiny = OrganizationSchema(
 my_orgs_schema = OrganizationSchema(many=True, exclude=('workspaces', ))
 org_schema_short = OrganizationSchema(exclude=('owner',))
 new_org_schema = NewOrgSchema()
+link_org_schema = LinkOrgSchema()
 
 workspace_schema = WorkspaceSchema()
 workspaces_schema = WorkspaceSchema(many=True)
@@ -415,6 +441,7 @@ workspace_schema_short = WorkspaceSchema(exclude=('owner',))
 my_workspaces_schema = WorkspaceSchema(many=True)
 new_workspace_schema = NewWorkspaceSchema()
 
+experiment_schema = ExperimentSchema()
 experiments_schema = ExperimentSchema(many=True)
 my_experiments_schema = ExperimentSchema(many=True)
 
@@ -432,14 +459,17 @@ created_access_token_schema = CreatedAccessTokenSchema()
 profile_org_schema = ProfileOrganizationSchema()
 profile_orgs_schema = ProfileOrganizationsSchema()
 profile_new_org_schema = ProfileNewOrganizationSchema()
-org_dashboard_schema = DashboardOrganizationSchema()
-org_members_dashboard_schema = DashboardOrganizationMembersSchema()
 org_info_schema = OrganizationInfoSchema()
 org_settings_schema = OrgSettingsSchema()
 org_name_schema = OrgNameSchema()
 profile_workspace_schema = ProfileWorkspaceSchema()
 profile_workspaces_schema = ProfileWorkspacesSchema()
 profile_new_workspace_schema = ProfileNewWorkspaceSchema()
-workspace_dashboard_schema = DashboardWorkspaceSchema()
+workspace_collaborator_schema = WorkspaceCollaboratorSchema()
 workspace_collaborators_schema = WorkspaceCollaboratorSchema(many=True)
 workspace_info_schema = WorkspaceInfoSchema()
+org_members_schema = OrgMemberSchema(many=True)
+org_member_schema = OrgMemberSchema()
+current_user_schema = CurrentUserSchema()
+schedules_schema = ScheduleSchema(many=True)
+light_access_tokens_schema = LightAccessTokenSchema(many=True)
