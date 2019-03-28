@@ -16,7 +16,7 @@ class ActivityService:
         pass
 
     def record(self, event_type: str, phase: str,
-               authenticated_user_id: str, user_id: str = None, 
+               authenticated_user_id: str, user_id: str = None,
                org_id: str = None, workspace_id: str = None,
                experiment_id: str = None, execution_id: str = None,
                payload: Any = None) -> str:
