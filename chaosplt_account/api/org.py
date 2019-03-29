@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import calendar
 from copy import deepcopy
-from datetime import datetime, time
+from datetime import date, datetime, time
 from typing import Any, Dict, List
 from uuid import UUID
 
@@ -310,7 +310,10 @@ def get_schedulings(services: Services, authed_user: User,
 
         if schedule.cron:
             schedule.plan = []
-            candidates = list(calendar.Calendar().itermonthdates(2019, 3))
+            today = date.today()
+            candidates = list(calendar.Calendar().itermonthdates(
+                today.year, today.month
+            ))
             start = max(
                 schedule.active_from,
                 datetime.combine(candidates[0], time.min))
