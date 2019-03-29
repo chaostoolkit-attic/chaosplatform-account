@@ -21,3 +21,4 @@ chaosplatform-relational-storage>=0.2.0
 toml>=0.10.0
 croniter>=0.3.27
 tzlocal>=1.5.1
+passlib>=1.7.1
